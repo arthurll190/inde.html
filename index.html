@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Jogo de Tiro ao Alvo Arcade — Ranking Global</title>
+  <!-- Tailwind CSS para estilização moderna e responsiva -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Fonte Inter para excelente legibilidade -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+
+    /* Área do Canvas com mira customizada e bloqueio de gestos acidentais no toque */
+    #arenaCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      cursor: crosshair;
+    }
+
+    @keyframes fadeSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animar-alerta {
+      animation: fadeSlideIn 0.25s ease-out forwards;
+    }
+
+    @keyframes pulseUrgent {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+
+    .tempo-urgente {
+      animation: pulseUrgent 0.6s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center px-3 sm:px-6 py-5 sm:py-8">
+
+  <main class="w-full max-w-3xl flex flex-col gap-4 sm:gap-5">
+
+    <!-- Cabeçalho e Status da Conexão Online -->
+    <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white px-5 py-4 rounded-2xl shadow-sm border border-slate-200/80">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-red-50 text-red-600 text-xl font-bold border border-red-100">
+            🎯
+          </span>
+          <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900">
+            Tiro ao Alvo Arcade
+          </h1>
+        </div>
+        <p class="text-xs sm:text-sm text-slate-500 mt-1">
+          Acerte o centro dos alvos antes que desapareçam e dispute o Top 10 Global!
+        </p>
+      </div>
+
+      <div class="self-start sm:self-center inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-600">
+        <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+        <span id="statusTexto">Conectando ao banco...</span>
+      </div>
+    </header>
+
+    <!-- Painel de Identificação do Jogador e Controles -->
+    <section class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200/80">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <div class="flex-1">
+          <label for="nomeJogador" class="sr-only">Nome do jogador</label>
+          <input
+            type="text"
+            id="nomeJogador"
+            maxlength="24"
+            placeholder="Digite seu nome ou apelido..."
+            class="w-full px-4 py-3 text-base text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 focus:bg-white transition"
+          >
+        </div>
+
+        <div class="flex gap-2.5">
+          <button
+            id="btnIniciar"
+            type="button"
+            class="flex-1 sm:flex-none px-6 py-3 bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white font-bold text-base rounded-xl shadow-sm shadow-red-600/20 transition cursor-pointer"
+          >
+            Iniciar Partida
+          </button>
+
+          <button
+            id="btnSom"
+            type="button"
+            title="Ativar ou silenciar efeitos sonoros"
+            aria-label="Alternar som"
+            class="px-3.5 py-3 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-700 font-semibold rounded-xl border border-slate-200 transition cursor-pointer"
+          >
+            🔊
+          </button>
+        </div>
+      </div>
+
+      <!-- Barra de Notificações (Substitui alert() com visual integrado) -->
+      <div
+        id="mensagemAviso"
+        role="alert"
+        class="hidden mt-3 px-4 py-2.5 rounded-xl text-sm font-medium border animar-alerta"
+      ></div>
+    </section>
+
+    <!-- HUD: Cronômetro, Placar e Combo -->
+    <section aria-label="Painel da partida" class="grid grid-cols-3 gap-2.5 sm:gap-4">
+      <!-- Cronômetro -->
+      <div class="bg-white px-3 sm:px-5 py-3 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col items-center justify-center">
+        <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">Tempo</span>
+        <span id="hudTempo" class="text-2xl sm:text-3xl font-black text-slate-800 tabular-nums mt-0.5">30.0s</span>
+      </div>
+
+      <!-- Placar Atual -->
+      <div class="bg-white px-3 sm:px-5 py-3 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col items-center justify-center">
+        <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">Placar</span>
+        <span id="hudPlacar" class="text-2xl sm:text-3xl font-black text-red-600 tabular-nums mt-0.5">0</span>
+      </div>
+
+      <!-- Sequência de Acertos (Combo) -->
+      <div class="bg-white px-3 sm:px-5 py-3 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col items-center justify-center">
+        <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">Combo</span>
+        <div class="flex items-baseline gap-1 mt-0.5">
+          <span id="hudCombo" class="text-2xl sm:text-3xl font-black text-amber-500 tabular-nums">0</span>
+          <span class="text-xs sm:text-sm font-bold text-amber-500">x</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Área de Jogo HTML5 Canvas Responsiva -->
+    <section class="relative w-full bg-slate-900 rounded-2xl shadow-md border border-slate-300 overflow-hidden aspect-[4/3] sm:aspect-[16/9]">
+      <canvas id="arenaCanvas"></canvas>
+
+      <!-- Sobreposição Inicial (Instruções de Pontuação) -->
+      <div
+        id="overlayInicio"
+        class="absolute inset-0 bg-slate-900/85 backdrop-blur-xs flex flex-col items-center justify-center p-5 text-center text-white"
+      >
+        <div class="max-w-md flex flex-col items-center">
+          <span class="px-3 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-semibold uppercase tracking-wider mb-3">
+            Desafio de 30 Segundos
+          </span>
+          <h2 class="text-xl sm:text-2xl font-extrabold mb-2">Precisão e Velocidade</h2>
+          <p class="text-xs sm:text-sm text-slate-300 mb-4 leading-relaxed">
+            Clique ou toque nos alvos antes que encolham completamente. Quanto mais perto do centro, maior a pontuação:
+          </p>
+
+          <!-- Legenda Visual dos Anéis -->
+          <div class="grid grid-cols-3 gap-2 sm:gap-3 w-full mb-5">
+            <div class="bg-slate-800/90 border border-slate-700 rounded-xl p-2.5 flex flex-col items-center">
+              <span class="w-4 h-4 rounded-full bg-red-500 ring-2 ring-amber-400 mb-1.5"></span>
+              <span class="text-xs font-bold text-amber-400">+50 pts</span>
+              <span class="text-[11px] text-slate-400">Mosca (Centro)</span>
+            </div>
+            <div class="bg-slate-800/90 border border-slate-700 rounded-xl p-2.5 flex flex-col items-center">
+              <span class="w-5 h-5 rounded-full bg-white border-4 border-red-500 mb-1.5"></span>
+              <span class="text-xs font-bold text-white">+25 pts</span>
+              <span class="text-[11px] text-slate-400">Anel Médio</span>
+            </div>
+            <div class="bg-slate-800/90 border border-slate-700 rounded-xl p-2.5 flex flex-col items-center">
+              <span class="w-6 h-6 rounded-full bg-red-600 border-2 border-white mb-1.5"></span>
+              <span class="text-xs font-bold text-red-400">+10 pts</span>
+              <span class="text-[11px] text-slate-400">Anel Externo</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="btnIniciarOverlay"
+            class="px-7 py-3 bg-red-600 hover:bg-red-500 active:scale-95 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-red-600/30 transition cursor-pointer"
+          >
+            Começar Agora
+          </button>
+        </div>
+      </div>
+
+      <!-- Sobreposição de Fim de Partida -->
+      <div
+        id="overlayFim"
+        class="hidden absolute inset-0 bg-slate-900/90 backdrop-blur-xs flex flex-col items-center justify-center p-5 text-center text-white"
+      >
+        <div class="max-w-sm w-full bg-slate-800/95 border border-slate-700 rounded-2xl p-5 sm:p-6 shadow-xl">
+          <span class="text-3xl mb-1 block">🏁</span>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-white">Tempo Esgotado!</h2>
+          <p id="resumoJogador" class="text-sm text-slate-300 mt-1">Excelente partida!</p>
+
+          <div class="my-4 py-3 px-4 rounded-xl bg-slate-900/90 border border-slate-700/80">
+            <span class="text-xs uppercase tracking-wider text-slate-400 block">Pontuação Final</span>
+            <span id="resumoPontos" class="text-4xl font-black text-amber-400 tabular-nums">0</span>
+            <div class="flex justify-center gap-4 mt-2 text-xs text-slate-300">
+              <span>Acertos: <strong id="resumoAcertos" class="text-white">0</strong></span>
+              <span>Maior Combo: <strong id="resumoMaxCombo" class="text-emerald-400">0x</strong></span>
+            </div>
+          </div>
+
+          <p id="statusSalvamento" class="text-xs text-emerald-400 font-medium mb-4">
+            Pontuação registrada no Ranking Global!
+          </p>
+
+          <button
+            type="button"
+            id="btnJogarNovamente"
+            class="w-full py-3 bg-red-600 hover:bg-red-500 active:scale-95 text-white font-bold text-base rounded-xl shadow-lg shadow-red-600/25 transition cursor-pointer"
+          >
+            Jogar Novamente
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ranking Global em Tempo Real (Top 10) -->
+    <section class="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200/80">
+      <div class="flex items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-100">
+        <div class="flex items-center gap-2.5">
+          <span class="text-xl">🏆</span>
+          <h2 class="text-lg sm:text-xl font-extrabold text-slate-900">Ranking Global (Top 10)</h2>
+        </div>
+        <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+          Ao vivo
+        </span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+              <th class="py-2.5 pl-2 pr-2 w-14">Pos.</th>
+              <th class="py-2.5 px-2">Jogador</th>
+              <th class="py-2.5 px-2 hidden sm:table-cell">Data</th>
+              <th class="py-2.5 pl-2 pr-2 text-right">Pontuação</th>
+            </tr>
+          </thead>
+          <tbody id="tabelaRanking" class="divide-y divide-slate-100 text-sm">
+            <tr>
+              <td colspan="4" class="py-6 text-center text-slate-400 italic">
+                Carregando melhores pontuações...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Lógica Completa do Jogo + Banco de Dados Online Firebase Firestore -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // =========================================================================
+    // 1. CONFIGURAÇÃO DO BANCO DE DADOS ONLINE (FIREBASE FIRESTORE)
+    // =========================================================================
+    const appId = typeof __app_id !== "undefined" ? __app_id : "tiro-ao-alvo-arcade-global";
+    const envFirebaseConfig = typeof __firebase_config !== "undefined" ? JSON.parse(__firebase_config) : null;
+
+    // Caso publique este arquivo fora deste ambiente (ex: GitHub Pages),
+    // você pode colar aqui o objeto firebaseConfig do seu projeto Firebase:
+    const githubFirebaseConfig = null;
+
+    const firebaseConfig = envFirebaseConfig || githubFirebaseConfig;
+
+    let db = null;
+    let auth = null;
+    let usuarioAtual = null;
+    let unsubscribeRanking = null;
+    let ultimoRegistroId = null;
+
+    // Referências de UI
+    const statusDot = document.getElementById("statusDot");
+    const statusTexto = document.getElementById("statusTexto");
+    const inputNome = document.getElementById("nomeJogador");
+    const btnIniciar = document.getElementById("btnIniciar");
+    const btnIniciarOverlay = document.getElementById("btnIniciarOverlay");
+    const btnJogarNovamente = document.getElementById("btnJogarNovamente");
+    const btnSom = document.getElementById("btnSom");
+    const mensagemAviso = document.getElementById("mensagemAviso");
+
+    const hudTempo = document.getElementById("hudTempo");
+    const hudPlacar = document.getElementById("hudPlacar");
+    const hudCombo = document.getElementById("hudCombo");
+
+    const overlayInicio = document.getElementById("overlayInicio");
+    const overlayFim = document.getElementById("overlayFim");
+    const resumoJogador = document.getElementById("resumoJogador");
+    const resumoPontos = document.getElementById("resumoPontos");
+    const resumoAcertos = document.getElementById("resumoAcertos");
+    const resumoMaxCombo = document.getElementById("resumoMaxCombo");
+    const statusSalvamento = document.getElementById("statusSalvamento");
+    const tabelaRanking = document.getElementById("tabelaRanking");
+
+    // =========================================================================
+    // 2. EFEITOS SONOROS SINTETIZADOS (WEB AUDIO API — SEM URLS EXTERNAS)
+    // =========================================================================
+    let somAtivo = true;
+    let audioCtx = null;
+
+    function tocarSomAcerto(pontos, comboAtual) {
+      if (!somAtivo) return;
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+
+        const agora = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        // Frequência sobe levemente com o combo e precisão
+        const baseFreq = pontos === 50 ? 680 : pontos === 25 ? 520 : 390;
+        const bonusCombo = Math.min(comboAtual * 18, 240);
+
+        osc.type = pontos === 50 ? "triangle" : "sine";
+        osc.frequency.setValueAtTime(baseFreq + bonusCombo, agora);
+        osc.frequency.exponentialRampToValueAtTime((baseFreq + bonusCombo) * 1.35, agora + 0.11);
+
+        gain.gain.setValueAtTime(0.14, agora);
+        gain.gain.exponentialRampToValueAtTime(0.001, agora + 0.13);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(agora);
+        osc.stop(agora + 0.14);
+      } catch (e) {
+        // Ignora caso o navegador bloqueie áudio antes de interação
+      }
+    }
+
+    function tocarSomErro() {
+      if (!somAtivo) return;
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const agora = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(160, agora);
+        osc.frequency.linearRampToValueAtTime(110, agora + 0.12);
+
+        gain.gain.setValueAtTime(0.07, agora);
+        gain.gain.exponentialRampToValueAtTime(0.001, agora + 0.13);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(agora);
+        osc.stop(agora + 0.14);
+      } catch (e) {
+        // Ignora silenciosamente
+      }
+    }
+
+    btnSom.addEventListener("click", () => {
+      somAtivo = !somAtivo;
+      btnSom.textContent = somAtivo ? "🔊" : "🔇";
+    });
+
+    // =========================================================================
+    // 3. MENSAGENS E NOTIFICAÇÕES NA INTERFACE
+    // =========================================================================
+    function exibirAviso(texto, tipo = "aviso") {
+      mensagemAviso.textContent = texto;
+      mensagemAviso.className = "mt-3 px-4 py-2.5 rounded-xl text-sm font-medium border animar-alerta ";
+
+      if (tipo === "erro") {
+        mensagemAviso.classList.add("bg-red-50", "text-red-800", "border-red-200");
+      } else if (tipo === "sucesso") {
+        mensagemAviso.classList.add("bg-emerald-50", "text-emerald-800", "border-emerald-200");
+      } else {
+        mensagemAviso.classList.add("bg-amber-50", "text-amber-800", "border-amber-200");
+      }
+
+      mensagemAviso.classList.remove("hidden");
+    }
+
+    function ocultarAviso() {
+      mensagemAviso.classList.add("hidden");
+    }
+
+    // =========================================================================
+    // 4. MOTOR DO JOGO EM HTML5 CANVAS RESPONSIVO
+    // =========================================================================
+    const canvas = document.getElementById("arenaCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let larguraArena = 800;
+    let alturaArena = 450;
+
+    // Estado da partida
+    const DURACAO_PARTIDA = 30.0;
+    let emJogo = false;
+    let tempoRestante = DURACAO_PARTIDA;
+    let pontuacao = 0;
+    let combo = 0;
+    let maiorCombo = 0;
+    let totalAcertos = 0;
+    let nomeJogadorAtual = "";
+
+    // Coleções de entidades visuais no canvas
+    let alvos = [];
+    let particulas = [];
+    let textosFlutuantes = [];
+    let ondasImpacto = [];
+
+    let ultimoFrameTime = 0;
+    let acumuladorSpawn = 0;
+
+    /**
+     * Ajusta a resolução interna do Canvas de acordo com o tamanho real da tela e DPR
+     */
+    function redimensionarCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      larguraArena = rect.width;
+      alturaArena = rect.height;
+
+      canvas.width = Math.round(larguraArena * dpr);
+      canvas.height = Math.round(alturaArena * dpr);
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Mantém alvos ativos dentro dos limites caso a tela gire/redimensione
+      alvos.forEach((alvo) => {
+        const margem = alvo.raioMaximo + 14;
+        alvo.x = Math.max(margem, Math.min(larguraArena - margem, alvo.x));
+        alvo.y = Math.max(margem, Math.min(alturaArena - margem, alvo.y));
+      });
+    }
+
+    window.addEventListener("resize", redimensionarCanvas);
+    redimensionarCanvas();
+
+    /**
+     * Cria um novo alvo circular concêntrico em posição aleatória sem sobrepor outros alvos
+     */
+    function criarAlvo() {
+      // Raio inicial proporcional à tela, garantindo alvo confortável no celular
+      const menorDimensao = Math.min(larguraArena, alturaArena);
+      const raioMaximo = Math.max(38, Math.min(54, menorDimensao * 0.125));
+      const raioMinimo = 9;
+      const margem = raioMaximo + 16;
+
+      let x = larguraArena / 2;
+      let y = alturaArena / 2;
+      let posicaoValida = false;
+
+      for (let tentativa = 0; tentativa < 25; tentativa++) {
+        const candX = margem + Math.random() * Math.max(10, larguraArena - margem * 2);
+        const candY = margem + Math.random() * Math.max(10, alturaArena - margem * 2);
+
+        const sobrepoe = alvos.some((outro) => {
+          const dist = Math.hypot(candX - outro.x, candY - outro.y);
+          return dist < raioMaximo + outro.raioAtual + 16;
+        });
+
+        if (!sobrepoe) {
+          x = candX;
+          y = candY;
+          posicaoValida = true;
+          break;
+        }
+      }
+
+      if (!posicaoValida) {
+        x = margem + Math.random() * Math.max(10, larguraArena - margem * 2);
+        y = margem + Math.random() * Math.max(10, alturaArena - margem * 2);
+      }
+
+      // Tempo total de vida do alvo antes de encolher até sumir (em segundos)
+      const duracaoVida = 2.75 + Math.random() * 0.65;
+
+      alvos.push({
+        x,
+        y,
+        raioMaximo,
+        raioMinimo,
+        raioAtual: raioMaximo,
+        idade: 0,
+        duracaoVida
+      });
+    }
+
+    /**
+     * Cria partículas explosivas e efeito flutuante de pontuação ao acertar um alvo
+     */
+    function criarEfeitoAcerto(x, y, pontos, corPrincipal) {
+      const qtdParticulas = pontos === 50 ? 24 : pontos === 25 ? 16 : 12;
+
+      for (let i = 0; i < qtdParticulas; i++) {
+        const angulo = (Math.PI * 2 * i) / qtdParticulas + (Math.random() - 0.5) * 0.4;
+        const velocidade = 75 + Math.random() * (pontos === 50 ? 190 : 140);
+        particulas.push({
+          x,
+          y,
+          vx: Math.cos(angulo) * velocidade,
+          vy: Math.sin(angulo) * velocidade,
+          raio: 2.5 + Math.random() * 3.5,
+          cor: i % 3 === 0 ? "#ffffff" : corPrincipal,
+          vida: 1.0,
+          decaimento: 1.8 + Math.random() * 0.9
+        });
+      }
+
+      // Onda de choque circular
+      ondasImpacto.push({
+        x,
+        y,
+        raio: 10,
+        raioMax: pontos === 50 ? 68 : 50,
+        cor: corPrincipal,
+        vida: 1.0
+      });
+
+      // Texto flutuante dos pontos ganhos
+      const rotulo = pontos === 50 ? "+50 MOSCA!" : `+${pontos}`;
+      textosFlutuantes.push({
+        x,
+        y: y - 10,
+        vy: -65,
+        texto: rotulo,
+        cor: pontos === 50 ? "#fbbf24" : pontos === 25 ? "#ffffff" : "#f87171",
+        escala: pontos === 50 ? 1.2 : 1.0,
+        vida: 1.0
+      });
+    }
+
+    /**
+     * Cria indicador discreto quando o jogador clica fora de todos os alvos
+     */
+    function criarEfeitoErro(x, y) {
+      for (let i = 0; i < 6; i++) {
+        const angulo = Math.random() * Math.PI * 2;
+        const vel = 35 + Math.random() * 45;
+        particulas.push({
+          x,
+          y,
+          vx: Math.cos(angulo) * vel,
+          vy: Math.sin(angulo) * vel,
+          raio: 2,
+          cor: "#94a3b8",
+          vida: 0.7,
+          decaimento: 2.4
+        });
+      }
+
+      textosFlutuantes.push({
+        x,
+        y: y - 6,
+        vy: -40,
+        texto: "Errou",
+        cor: "#94a3b8",
+        escala: 0.85,
+        vida: 0.75
+      });
+    }
+
+    /**
+     * Processa o disparo (clique do mouse ou toque na tela)
+     */
+    function processarDisparo(evento) {
+      if (!emJogo) return;
+      evento.preventDefault();
+
+      const rect = canvas.getBoundingClientRect();
+      const toqueX = evento.clientX - rect.left;
+      const toqueY = evento.clientY - rect.top;
+
+      // Verifica do alvo mais recente (desenhado por cima) para o mais antigo
+      let acertouAlgum = false;
+
+      for (let i = alvos.length - 1; i >= 0; i--) {
+        const alvo = alvos[i];
+        const distancia = Math.hypot(toqueX - alvo.x, toqueY - alvo.y);
+
+        if (distancia <= alvo.raioAtual) {
+          acertouAlgum = true;
+          const proporcao = distancia / alvo.raioAtual;
+
+          let pontosGanhos = 10;
+          let corEfeito = "#ef4444";
+
+          if (proporcao <= 0.34) {
+            // Centro (Mosca): 50 pontos
+            pontosGanhos = 50;
+            corEfeito = "#fbbf24";
+          } else if (proporcao <= 0.68) {
+            // Anel intermediário: 25 pontos
+            pontosGanhos = 25;
+            corEfeito = "#38bdf8";
+          } else {
+            // Anel externo: 10 pontos
+            pontosGanhos = 10;
+            corEfeito = "#ef4444";
+          }
+
+          pontuacao += pontosGanhos;
+          combo += 1;
+          totalAcertos += 1;
+          if (combo > maiorCombo) {
+            maiorCombo = combo;
+          }
+
+          atualizarHUD();
+          tocarSomAcerto(pontosGanhos, combo);
+          criarEfeitoAcerto(toqueX, toqueY, pontosGanhos, corEfeito);
+
+          // Remove alvo atingido e repõe imediatamente se houver poucos na tela
+          alvos.splice(i, 1);
+          if (alvos.length < 2) {
+            criarAlvo();
+          }
+          break;
+        }
+      }
+
+      if (!acertouAlgum) {
+        combo = 0;
+        atualizarHUD();
+        tocarSomErro();
+        criarEfeitoErro(toqueX, toqueY);
+      }
+    }
+
+    canvas.addEventListener("pointerdown", processarDisparo);
+
+    /**
+     * Atualiza os valores exibidos no placar superior
+     */
+    function atualizarHUD() {
+      hudTempo.textContent = `${Math.max(0, tempoRestante).toFixed(1)}s`;
+      hudPlacar.textContent = String(pontuacao);
+      hudCombo.textContent = String(combo);
+
+      if (emJogo && tempoRestante <= 5.0) {
+        hudTempo.classList.add("text-red-600", "tempo-urgente");
+        hudTempo.classList.remove("text-slate-800");
+      } else {
+        hudTempo.classList.remove("text-red-600", "tempo-urgente");
+        hudTempo.classList.add("text-slate-800");
+      }
+    }
+
+    /**
+     * Desenha o fundo da arena estilo estande de tiro moderno
+     */
+    function desenharFundoArena() {
+      // Gradiente suave escuro para destacar os alvos vermelho e branco
+      const grad = ctx.createRadialGradient(
+        larguraArena * 0.5,
+        alturaArena * 0.5,
+        30,
+        larguraArena * 0.5,
+        alturaArena * 0.5,
+        Math.max(larguraArena, alturaArena) * 0.75
+      );
+      grad.addColorStop(0, "#1e293b");
+      grad.addColorStop(1, "#0f172a");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, larguraArena, alturaArena);
+
+      // Grade sutil de precisão
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.07)";
+      ctx.lineWidth = 1;
+      const passoGrade = 40;
+
+      for (let x = passoGrade; x < larguraArena; x += passoGrade) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, alturaArena);
+        ctx.stroke();
+      }
+      for (let y = passoGrade; y < alturaArena; y += passoGrade) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(larguraArena, y);
+        ctx.stroke();
+      }
+    }
+
+    /**
+     * Desenha um alvo circular concêntrico estilo olímpico/arcade vermelho e branco
+     */
+    function desenharAlvo(alvo) {
+      // Animação suave de surgimento nos primeiros 120ms
+      const fatorEntrada = Math.min(1, alvo.idade / 0.12);
+      const r = alvo.raioAtual * (0.6 + 0.4 * fatorEntrada);
+
+      ctx.save();
+      ctx.translate(alvo.x, alvo.y);
+
+      // Sombra projetada
+      ctx.beginPath();
+      ctx.arc(0, 4, r, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.fill();
+
+      // 1. Anel Externo (10 pts) — Vermelho vibrante com borda branca
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fillStyle = "#dc2626";
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+
+      // 2. Anel Intermediário (25 pts) — Branco puro
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.68, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+
+      // 3. Centro / Mosca (50 pts) — Vermelho intenso com ponto central dourado
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.34, 0, Math.PI * 2);
+      ctx.fillStyle = "#ef4444";
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, Math.max(2.5, r * 0.09), 0, Math.PI * 2);
+      ctx.fillStyle = "#fef08a";
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    /**
+     * Atualiza física e renderiza cada quadro do jogo
+     */
+    function loopPrincipal(timestamp) {
+      if (!ultimoFrameTime) ultimoFrameTime = timestamp;
+      const dt = Math.min(0.05, (timestamp - ultimoFrameTime) / 1000);
+      ultimoFrameTime = timestamp;
+
+      desenharFundoArena();
+
+      if (emJogo) {
+        // Atualiza cronômetro regressivo de 30s
+        tempoRestante -= dt;
+        if (tempoRestante <= 0) {
+          tempoRestante = 0;
+          atualizarHUD();
+          encerrarPartida();
+        } else {
+          atualizarHUD();
+        }
+
+        // Controla surgimento periódico de novos alvos (máximo 3 simultâneos)
+        acumuladorSpawn += dt;
+        const intervaloSpawn = tempoRestante < 10 ? 0.62 : 0.78;
+        if (alvos.length === 0 || (alvos.length < 3 && acumuladorSpawn >= intervaloSpawn)) {
+          criarAlvo();
+          acumuladorSpawn = 0;
+        }
+
+        // Atualiza tamanho decrescente dos alvos
+        for (let i = alvos.length - 1; i >= 0; i--) {
+          const alvo = alvos[i];
+          alvo.idade += dt;
+          const progresso = alvo.idade / alvo.duracaoVida;
+
+          if (progresso >= 1) {
+            // Alvo encolheu completamente sem ser atingido
+            alvos.splice(i, 1);
+            if (combo > 0) {
+              combo = 0;
+              atualizarHUD();
+            }
+          } else {
+            alvo.raioAtual = alvo.raioMaximo - (alvo.raioMaximo - alvo.raioMinimo) * progresso;
+          }
+        }
+      }
+
+      // Renderiza alvos
+      alvos.forEach(desenharAlvo);
+
+      // Renderiza ondas de impacto
+      for (let i = ondasImpacto.length - 1; i >= 0; i--) {
+        const onda = ondasImpacto[i];
+        onda.vida -= dt * 3.2;
+        onda.raio += (onda.raioMax - onda.raio) * dt * 10;
+
+        if (onda.vida <= 0) {
+          ondasImpacto.splice(i, 1);
+        } else {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(onda.x, onda.y, onda.raio, 0, Math.PI * 2);
+          ctx.strokeStyle = onda.cor;
+          ctx.globalAlpha = Math.max(0, onda.vida * 0.7);
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // Atualiza e renderiza partículas
+      for (let i = particulas.length - 1; i >= 0; i--) {
+        const p = particulas[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 180 * dt; // leve gravidade arcade
+        p.vida -= p.decaimento * dt;
+
+        if (p.vida <= 0) {
+          particulas.splice(i, 1);
+        } else {
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.vida);
+          ctx.fillStyle = p.cor;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.raio, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // Atualiza e renderiza textos flutuantes de pontuação
+      for (let i = textosFlutuantes.length - 1; i >= 0; i--) {
+        const txt = textosFlutuantes[i];
+        txt.y += txt.vy * dt;
+        txt.vida -= dt * 1.25;
+
+        if (txt.vida <= 0) {
+          textosFlutuantes.splice(i, 1);
+        } else {
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, txt.vida);
+          ctx.font = `900 ${Math.round(18 * txt.escala)}px Inter, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+          ctx.fillText(txt.texto, txt.x + 1.5, txt.y + 1.5);
+          ctx.fillStyle = txt.cor;
+          ctx.fillText(txt.texto, txt.x, txt.y);
+          ctx.restore();
+        }
+      }
+
+      requestAnimationFrame(loopPrincipal);
+    }
+
+    // =========================================================================
+    // 5. CONTROLE DE FLUXO DA PARTIDA
+    // =========================================================================
+    function iniciarPartida() {
+      const nomeDigitado = inputNome.value.trim();
+
+      if (!nomeDigitado) {
+        exibirAviso("Digite seu nome ou apelido antes de iniciar a partida!", "aviso");
+        inputNome.focus();
+        return;
+      }
+
+      ocultarAviso();
+      nomeJogadorAtual = nomeDigitado;
+
+      // Reseta estado da partida
+      emJogo = true;
+      tempoRestante = DURACAO_PARTIDA;
+      pontuacao = 0;
+      combo = 0;
+      maiorCombo = 0;
+      totalAcertos = 0;
+
+      alvos = [];
+      particulas = [];
+      textosFlutuantes = [];
+      ondasImpacto = [];
+      acumuladorSpawn = 0;
+
+      overlayInicio.classList.add("hidden");
+      overlayFim.classList.add("hidden");
+      inputNome.disabled = true;
+      btnIniciar.disabled = true;
+      btnIniciar.classList.add("opacity-60", "cursor-not-allowed");
+
+      atualizarHUD();
+
+      // Cria 2 alvos iniciais imediatamente para ação instantânea
+      criarAlvo();
+      criarAlvo();
+    }
+
+    async function encerrarPartida() {
+      emJogo = false;
+      alvos = [];
+
+      inputNome.disabled = false;
+      btnIniciar.disabled = false;
+      btnIniciar.classList.remove("opacity-60", "cursor-not-allowed");
+
+      // Atualiza tela de resumo
+      resumoJogador.textContent = `Jogador: ${nomeJogadorAtual}`;
+      resumoPontos.textContent = String(pontuacao);
+      resumoAcertos.textContent = String(totalAcertos);
+      resumoMaxCombo.textContent = `${maiorCombo}x`;
+      overlayFim.classList.remove("hidden");
+
+      await salvarPontuacaoOnline(nomeJogadorAtual, pontuacao);
+    }
+
+    btnIniciar.addEventListener("click", iniciarPartida);
+    btnIniciarOverlay.addEventListener("click", iniciarPartida);
+    btnJogarNovamente.addEventListener("click", iniciarPartida);
+
+    inputNome.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !emJogo) {
+        iniciarPartida();
+      }
+    });
+
+    // =========================================================================
+    // 6. PERSISTÊNCIA E RANKING GLOBAL EM TEMPO REAL (FIRESTORE)
+    // =========================================================================
+    async function salvarPontuacaoOnline(nome, pontos) {
+      if (!db || !usuarioAtual) {
+        statusSalvamento.textContent = "Modo offline: configure o Firebase para salvar no ranking global.";
+        statusSalvamento.className = "text-xs text-amber-400 font-medium mb-4";
+        return;
+      }
+
+      statusSalvamento.textContent = "Salvando pontuação no Ranking Global...";
+      statusSalvamento.className = "text-xs text-slate-300 font-medium mb-4";
+
+      try {
+        // Caminho público padronizado para ranking compartilhado entre todos os jogadores
+        const colecaoRanking = collection(db, "artifacts", appId, "public", "data", "ranking_tiro_alvo");
+        const docRef = await addDoc(colecaoRanking, {
+          nome: nome,
+          pontuacao: Number(pontos),
+          data: new Date().toISOString(),
+          timestamp: Date.now()
+        });
+
+        ultimoRegistroId = docRef.id;
+        statusSalvamento.textContent = "Pontuação salva no Ranking Global em tempo real!";
+        statusSalvamento.className = "text-xs text-emerald-400 font-medium mb-4";
+      } catch (erro) {
+        console.error("Erro ao salvar pontuação no Firestore:", erro);
+        statusSalvamento.textContent = "Não foi possível salvar a pontuação no servidor.";
+        statusSalvamento.className = "text-xs text-red-400 font-medium mb-4";
+      }
+    }
+
+    function formatarDataBr(isoString, timestamp) {
+      try {
+        const dataObj = isoString ? new Date(isoString) : new Date(timestamp);
+        if (isNaN(dataObj.getTime())) return "Agora";
+        return dataObj.toLocaleString("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+      } catch {
+        return "-";
+      }
+    }
+
+    function renderizarTabelaRanking(listaTop10) {
+      tabelaRanking.innerHTML = "";
+
+      if (!listaTop10 || listaTop10.length === 0) {
+        tabelaRanking.innerHTML = `
+          <tr>
+            <td colspan="4" class="py-6 text-center text-slate-400">
+              Nenhuma pontuação registrada ainda. Jogue a primeira partida!
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      const medalhas = ["🥇", "🥈", "🥉"];
+
+      listaTop10.forEach((registro, idx) => {
+        const tr = document.createElement("tr");
+        const ehAtual = ultimoRegistroId && registro.id === ultimoRegistroId;
+
+        tr.className = ehAtual
+          ? "bg-amber-50/90 font-semibold text-slate-900"
+          : idx === 0
+          ? "bg-slate-50/70 text-slate-900"
+          : "hover:bg-slate-50/60 text-slate-700";
+
+        // Coluna Posição
+        const tdPos = document.createElement("td");
+        tdPos.className = "py-3 pl-2 pr-2 font-extrabold text-slate-600";
+        tdPos.textContent = medalhas[idx] || `${idx + 1}º`;
+
+        // Coluna Nome do Jogador
+        const tdNome = document.createElement("td");
+        tdNome.className = "py-3 px-2 font-semibold truncate max-w-[140px] sm:max-w-[220px]";
+        tdNome.textContent = registro.nome || "Anônimo";
+
+        if (ehAtual) {
+          const tagVoce = document.createElement("span");
+          tagVoce.className = "ml-2 inline-block px-2 py-0.5 text-[10px] font-bold uppercase bg-amber-200/80 text-amber-900 rounded-full";
+          tagVoce.textContent = "Sua partida";
+          tdNome.appendChild(tagVoce);
+        }
+
+        // Coluna Data
+        const tdData = document.createElement("td");
+        tdData.className = "py-3 px-2 text-xs text-slate-400 hidden sm:table-cell";
+        tdData.textContent = formatarDataBr(registro.data, registro.timestamp);
+
+        // Coluna Pontuação
+        const tdPontos = document.createElement("td");
+        tdPontos.className = "py-3 pl-2 pr-2 text-right font-black text-red-600 tabular-nums";
+        tdPontos.textContent = `${Number(registro.pontuacao || 0)} pts`;
+
+        tr.appendChild(tdPos);
+        tr.appendChild(tdNome);
+        tr.appendChild(tdData);
+        tr.appendChild(tdPontos);
+
+        tabelaRanking.appendChild(tr);
+      });
+    }
+
+    function escutarRankingGlobal() {
+      if (!db || !usuarioAtual) return;
+
+      if (unsubscribeRanking) {
+        unsubscribeRanking();
+      }
+
+      const colecaoRanking = collection(db, "artifacts", appId, "public", "data", "ranking_tiro_alvo");
+
+      // Consulta simples sem orderBy/limit no Firestore; ordenação feita em memória
+      unsubscribeRanking = onSnapshot(
+        colecaoRanking,
+        (snapshot) => {
+          const registros = [];
+          snapshot.forEach((doc) => {
+            const dados = doc.data();
+            if (dados && typeof dados.pontuacao === "number") {
+              registros.push({
+                id: doc.id,
+                ...dados
+              });
+            }
+          });
+
+          // Ordena pela maior pontuação (decrescente); em empate, quem alcançou primeiro fica acima
+          registros.sort((a, b) => {
+            if (b.pontuacao !== a.pontuacao) {
+              return b.pontuacao - a.pontuacao;
+            }
+            return (a.timestamp || 0) - (b.timestamp || 0);
+          });
+
+          renderizarTabelaRanking(registros.slice(0, 10));
+        },
+        (erro) => {
+          console.error("Erro ao sincronizar Ranking Global:", erro);
+          tabelaRanking.innerHTML = `
+            <tr>
+              <td colspan="4" class="py-6 text-center text-red-500">
+                Erro ao carregar o Ranking Global em tempo real.
+              </td>
+            </tr>
+          `;
+        }
+      );
+    }
+
+    async function inicializarFirebase() {
+      if (!firebaseConfig) {
+        statusDot.className = "w-2.5 h-2.5 rounded-full bg-amber-500";
+        statusTexto.textContent = "Configuração Firebase pendente";
+        tabelaRanking.innerHTML = `
+          <tr>
+            <td colspan="4" class="py-5 text-center text-slate-500 text-xs sm:text-sm">
+              Para usar o ranking online fora desta plataforma (ex: GitHub Pages), adicione suas credenciais do Firebase em <code class="bg-slate-100 px-1.5 py-0.5 rounded">githubFirebaseConfig</code>.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      try {
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+
+        // Autenticação obrigatória antes de ler/gravar no Firestore
+        if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+
+        onAuthStateChanged(auth, (user) => {
+          if (user) {
+            usuarioAtual = user;
+            statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+            statusTexto.textContent = "Banco online conectado";
+            escutarRankingGlobal();
+          }
+        });
+      } catch (erro) {
+        console.error("Falha ao conectar no Firebase:", erro);
+        statusDot.className = "w-2.5 h-2.5 rounded-full bg-red-500";
+        statusTexto.textContent = "Falha na conexão online";
+      }
+    }
+
+    // Inicia o loop gráfico e a conexão com o banco online
+    requestAnimationFrame(loopPrincipal);
+    inicializarFirebase();
+  </script>
+</body>
+</html>
